@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stok Maintenance</title>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8"></script>
+
+<style>
+body { font-family: Arial; padding:20px; max-width:500px; margin:auto; }
+input { width:100%; padding:12px; margin:8px 0; font-size:16px; }
+button { padding:12px; width:100%; font-size:16px; margin-top:10px; }
+#suggest { border:1px solid #ccc; display:none; }
+#suggest div { padding:8px; cursor:pointer; }
+#suggest div:hover { background:#eee; }
+</style>
+</head>
+<body>
+
+<h2>STOK MAINTENANCE</h2>
+
+<button onclick="startScan()">📷 Mulai Scan</button>
+<div id="reader" style="width:100%; margin-top:10px;"></div>
+
+<input id="code" placeholder="Kode / Nama">
+<div id="suggest"></div>
+
+<input id="name" readonly placeholder="Nama Barang">
+<input id="stock" readonly placeholder="Stok Tersedia">
+<input id="qty" type="number" placeholder="Qty">
+
+<button onclick="save()">💾 Simpan</button>
+
+<script>
+
+const API = "https://script.google.com/macros/s/AKfycbweUaptRM4z_-B4Q0qKsCAyU327AU902oVpjD35Ev2SiRFZeuRIm7gHXvUs_ZXBB2MW/exec";
+
+let MASTER = [];
+let MAP = {};
+let scanner = null;
+
+async function loadMaster(){
+  const res = await fetch(API + "?action=master");
+  const data = await res.json();
+  MASTER = data;
+
+  data.forEach(item=>{
+    MAP[item.code] = item;
+    if(item.barcode) MAP[item.barcode] = item;
+  });
+}
+loadMaster();
+
+document.getElementById("code").addEventListener("input", function(){
+  const val = this.value.toUpperCase();
+  const box = document.getElementById("suggest");
+  box.innerHTML="";
+  if(!val){ box.style.display="none"; return; }
+
+  const hits = MASTER.filter(x =>
+    x.code.includes(val) ||
+    x.name.toUpperCase().includes(val)
+  ).slice(0,10);
+
+  if(!hits.length){ box.style.display="none"; return; }
+
+  hits.forEach(item=>{
+    const div = document.createElement("div");
+    div.textContent = item.code+" | "+item.name;
+    div.onclick=()=>{
+      document.getElementById("code").value=item.code;
+      fillItem(item.code);
+      box.style.display="none";
+    }
+    box.appendChild(div);
+  });
+
+  box.style.display="block";
+});
+
+function fillItem(code){
+  const item = MAP[code];
+  if(!item) return;
+  document.getElementById("name").value=item.name;
+  document.getElementById("stock").value=item.stock;
+}
+
+async function startScan(){
+  if(!scanner){
+    scanner=new Html5Qrcode("reader");
+  }
+  const cams=await Html5Qrcode.getCameras();
+  await scanner.start(
+    cams[0].id,
+    {fps:10, qrbox:250},
+    (decoded)=>{
+      document.getElementById("code").value=decoded;
+      fillItem(decoded.toUpperCase());
+      scanner.stop();
+    }
+  );
+}
+
+async function save(){
+  const payload={
+    code: document.getElementById("code").value,
+    qty: Number(document.getElementById("qty").value),
+    type:"KELUAR",
+    petugas:"ANGGA"
+  };
+
+  await fetch(API,{
+    method:"POST",
+    body:JSON.stringify(payload)
+  });
+
+  alert("Disimpan ke spreadsheet");
+}
+
+</script>
+</body>
+</html>
